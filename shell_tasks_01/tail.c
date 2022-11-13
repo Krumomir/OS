@@ -15,7 +15,7 @@ int getNewLines(int fd)
         if(buffer == '\n')
             counterNewLine++;
 
-    if(lseek(fd, -1, SEEK_CUR) == -1)
+    if(lseek(fd, 0, SEEK_SET) == -1)
     {
         close(fd);
         errx(EXIT_FAILURE, "lseek failed");
@@ -26,6 +26,8 @@ int getNewLines(int fd)
         errx(EXIT_FAILURE, "read failed");
     }
 
+	
+	
     return counterNewLine;
 }
 
@@ -72,7 +74,7 @@ void printLastNLines(int fd, int numLines)
     char buffer;
 
     getNLine(fd, getNewLines(fd) - numLines);
-
+	
     while(((result = read(fd, &buffer, 1)) != -1) && result != 0)
         printf("%c", buffer);
 
