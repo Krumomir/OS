@@ -1,5 +1,4 @@
 #include <stdio.h>
-#include "/home/krumomir/OS/Terminal/main.c"
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -9,96 +8,128 @@
 #include <unistd.h>
 #include <string.h>
 
+char **tokenize(char *line)
+{
+    char **tokens = malloc(sizeof(char *));
+
+    if (tokens == NULL)
+    {
+        return NULL;
+    }
+
+    char *token;
+    int i = 0;
+
+    while(token = strtok(line, " "))
+    {
+        tokens[i++] = token;
+        tokens = realloc(tokens, sizeof(char *) * (i + 1));
+        line = NULL;
+
+        if(tokens == NULL)
+        {
+            return NULL;
+        }
+    }
+    tokens[i] = NULL;
+
+    return tokens;
+}
+
+
 int main(int argc, char **argv)
 {
-	char *str = strdup("cut -d : -f 7 /etc/passwd");
-	char *str1 = strdup("sort");
-	char *str2 = strdup("uniq");
-	char *str3 = strdup("wc");
-	int status;
-	int pipe1 [2];
-	int pipe2 [2];
+	int commandStatus;
+	int pipes[2][2];
+	char **commands = (char **)malloc(4 * sizeof(char *));
 	
-	pipe(pipe1);
-	pipe(pipe2);
+	commands[0] = strdup("cut -d : -f 7 /etc/passwd");
+	commands[1] = strdup("sort");
+	commands[2] = strdup("uniq");
+	commands[3] = strdup("wc -l");
 	
-	int pidCut = fork();
+	pipe(pipes[0]);
+	pipe(pipes[1]);	
 	
-	if(pidCut == 0)
+	for(int i = 0; i < 4; i++)
+		printf("%d\n", i % 2);
+	
+	for(int i = 0; i < 4; i++)
 	{
-		char **command = tokenize(str);
-	
-		dup2(pipe1[1], 1);
-	
-		close(pipe1[0]);
-		close(pipe1[1]);			
+		int pid = fork();
 		
-		execvp(command[0], command);
-	}
+		if(0 == pid)
+		{
+			char **command = tokenize(commands[i]);
 	
-	wait(&status);
-	close(pipe1[1]);
-	
-	int pidSort = fork();
-	
-	if(pidSort == 0)
-	{
-		dup2(pipe1[0], 0);
-		dup2(pipe2[1], 1);
+			if(0 == i | 3 == i)
+			{
+				if(0 == i)
+					dup2(pipes[0][1], 1);
+				else
+					dup2(pipes[0][0], 0);
+				
+				close(pipes[0][0]);
+				close(pipes[0][1]);			
 		
-		close(pipe1[0]);
-		close(pipe1[1]);
-		
-		close(pipe2[0]);
-		close(pipe2[1]);	
-		
-		execlp(str1, str1, NULL);
-	}
-		
-	wait(&status);
-	close(pipe2[1]);
-	close(pipe1[0]);	
-	pipe(pipe1);
-	
-	int pidUniq = fork();
-
-	if(pidUniq == 0)
-	{
-		dup2(pipe2[0], 0);
-		dup2(pipe1[1], 1);
-		
-		close(pipe2[0]);
-		close(pipe2[1]);
+				execvp(command[0], command);
+			}
+			else
+			{
+				if(2 == i)		
+				{		
+					dup2(pipes[1][0], 0);
+					dup2(pipes[0][1], 1);
+				}
+				else
+				{
+					dup2(pipes[0][0], 0);
+					dup2(pipes[1][1], 1);
+				}
+				
+				
+				close(pipes[0][0]);
+				close(pipes[0][1]);
+				
+				close(pipes[1][0]);
+				close(pipes[1][1]);	
+				
+				execvp(command[0], command);
+			}
+		}
+		else
+		{
+			if(0 == i)
+			{
+				wait(&commandStatus);
+				close(pipes[0][1]);
+			}
+			else if(1 == i)
+			{
+				wait(&commandStatus);
+				close(pipes[1][1]);
+				close(pipes[0][0]);
+				
+				pipe(pipes[0]);
+			}
+			else if(2 == i)
+			{
+				wait(&commandStatus);
+				close(pipes[1][0]);
+				close(pipes[0][1]);
+			}
+			else
+			{
+				wait(&commandStatus);
+				close(pipes[0][0]);
 			
-		close(pipe1[0]);
-		close(pipe1[1]);	
-		
-		execlp(str2, str2, NULL);
+				for(int j = 0; j < 4; j++)
+					free(commands[j]);
+				
+				free(commands);
+			}
+		}		
 	}
-		
-	wait(&status);
-	close(pipe2[0]);
-	close(pipe1[1]);
-	
-	int pidWc = fork();
-	
-	if(pidWc == 0)
-	{
-		dup2(pipe1[0], 0);
-		
-		close(pipe1[0]);
-		close(pipe1[1]);	
-		
-		execlp(str3, str3, "-l", NULL);
-	}
-		
-	wait(&status);
-	close(pipe1[0]);
-	
-	free(str);
-	free(str1);
-	free(str2);
-	free(str3);
 	
 	return 0;
 }
