@@ -8,110 +8,87 @@
 #include <unistd.h>
 #include <string.h>
 
-char **tokenize(char *line)
+void dup69(int fd1, int fd2)
 {
-    char **tokens = malloc(sizeof(char *));
-
-    if (tokens == NULL)
-    {
-        return NULL;
-    }
-
-    char *token;
-    int i = 0;
-
-    while(token = strtok(line, " "))
-    {
-        tokens[i++] = token;
-        tokens = realloc(tokens, sizeof(char *) * (i + 1));
-        line = NULL;
-
-        if(tokens == NULL)
-        {
-            return NULL;
-        }
-    }
-    tokens[i] = NULL;
-
-    return tokens;
+	int res = dup2(fd1, fd2);
+	
+	if(res == -1)
+		errx(3, "dup2 failed");
 }
-
 
 int main(int argc, char **argv)
 {
 	int commandStatus;
 	int pipes[2][2];
-	char **commands = (char **)malloc(4 * sizeof(char *));
 	int commandCount = 4;
 	
-	commands[0] = strdup("cut -d : -f 7 /etc/passwd");
-	commands[1] = strdup("sort");
-	commands[2] = strdup("uniq");
-	commands[3] = strdup("wc -l");
-	
-	pipe(pipes[0]);
-	pipe(pipes[1]);	
-	
+	char* cut[] = {"cut", "-f", "7", "-d", ":", "/etc/passwd", NULL};
+    char* sort[] = {"sort", NULL};
+    char* uniq[] = {"uniq", NULL};
+    char* wc[] = {"wc", "-l", NULL};
+    char** commands[] = {cut, sort, uniq, wc};
+
+	if(pipe(pipes[0]) == -1)
+		errx(1, "pipe failed");
+		
+	if(pipe(pipes[1]) == -1)
+		errx(1, "pipe failed");
+		
 	for(int i = 0; i < commandCount; i++)
 	{
 		int pid = fork();
 		
+		if(-1 == pid)
+			errx(2, "fork failed");
+		
 		if(0 == pid)
 		{
-			char **command = tokenize(commands[i]);
-			
-			printf("%s\n", command[0]);
-			
-			if(0 == i)
-				dup2(pipes[i % 2][1], 1);			
-			else if(3 == i)
-				dup2(pipes[abs((i % 2) - 1)][0], 0);
-			else
-			{
-				dup2(pipes[i % 2][1], 1);
-				dup2(pipes[abs((i % 2) - 1)][0], 0);		
-			}
-			
-			close(pipes[1][0]);
-			close(pipes[1][1]);
-			
-			close(pipes[0][0]);
-			close(pipes[0][1]);
-				
-			execvp(command[0], command);
+		    (i == 0) ? 
+		    	dup69(pipes[i % 2][1], 1) : 
+		        (i == 3) ? 
+		        	dup69(pipes[abs((i % 2) - 1)][0], 0) : 
+		        	(dup69(pipes[i % 2][1], 1), dup69(pipes[abs((i % 2) - 1)][0], 0));
+
+		    close(pipes[0][0]);
+		    close(pipes[0][1]);
+
+		    close(pipes[1][0]);
+		    close(pipes[1][1]);
+
+		    if(execvp(commands[i][0], commands[i]) == -1)
+		    	errx(4, "execvp failed");
 		}
 		else
 		{
-			if(0 == i)
-			{
-				wait(&commandStatus);
-				close(pipes[0][1]);
-			}
-			else if(1 == i)
-			{
-				wait(&commandStatus);
-				close(pipes[1][1]);
+			if(wait(&commandStatus) == -1)
+            {
+
 				close(pipes[0][0]);
-				
-				pipe(pipes[0]);
-			}
-			else if(2 == i)
-			{
-				wait(&commandStatus);
+				close(pipes[0][1]);
+
 				close(pipes[1][0]);
-				close(pipes[0][1]);
-			}
-			else
-			{
-				wait(&commandStatus);
-				close(pipes[0][0]);
-			
-				for(int j = 0; j < 4; j++)
-					free(commands[j]);
+				close(pipes[1][1]);				
 				
-				free(commands);
-			}
-		}		
+                err(7, "wait failed");
+            }
+            
+           	if(!WIFEXITED(commandStatus))
+            {
+                close(pipes[0][0]);
+				close(pipes[0][1]);
+
+				close(pipes[1][0]);
+				close(pipes[1][1]);		
+				
+				errx(8, "child failed to do anything");
+            }
+			 
+			 if(1 == i)
+				if(pipe(pipes[0]) == -1)
+					errx(1, "pipe failed");
+				
+			 close(pipes[i % 2][1]);	
+		}	
 	}
 	
 	return 0;
