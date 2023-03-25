@@ -42,6 +42,7 @@ int main(int argc, char **argv)
 	int commandStatus;
 	int pipes[2][2];
 	char **commands = (char **)malloc(4 * sizeof(char *));
+	int commandCount = 4;
 	
 	commands[0] = strdup("cut -d : -f 7 /etc/passwd");
 	commands[1] = strdup("sort");
@@ -51,51 +52,33 @@ int main(int argc, char **argv)
 	pipe(pipes[0]);
 	pipe(pipes[1]);	
 	
-	for(int i = 0; i < 4; i++)
-		printf("%d\n", i % 2);
-	
-	for(int i = 0; i < 4; i++)
+	for(int i = 0; i < commandCount; i++)
 	{
 		int pid = fork();
 		
 		if(0 == pid)
 		{
 			char **command = tokenize(commands[i]);
-	
-			if(0 == i | 3 == i)
-			{
-				if(0 == i)
-					dup2(pipes[0][1], 1);
-				else
-					dup2(pipes[0][0], 0);
-				
-				close(pipes[0][0]);
-				close(pipes[0][1]);			
-		
-				execvp(command[0], command);
-			}
+			
+			printf("%s\n", command[0]);
+			
+			if(0 == i)
+				dup2(pipes[i % 2][1], 1);			
+			else if(3 == i)
+				dup2(pipes[abs((i % 2) - 1)][0], 0);
 			else
 			{
-				if(2 == i)		
-				{		
-					dup2(pipes[1][0], 0);
-					dup2(pipes[0][1], 1);
-				}
-				else
-				{
-					dup2(pipes[0][0], 0);
-					dup2(pipes[1][1], 1);
-				}
-				
-				
-				close(pipes[0][0]);
-				close(pipes[0][1]);
-				
-				close(pipes[1][0]);
-				close(pipes[1][1]);	
-				
-				execvp(command[0], command);
+				dup2(pipes[i % 2][1], 1);
+				dup2(pipes[abs((i % 2) - 1)][0], 0);		
 			}
+			
+			close(pipes[1][0]);
+			close(pipes[1][1]);
+			
+			close(pipes[0][0]);
+			close(pipes[0][1]);
+				
+			execvp(command[0], command);
 		}
 		else
 		{
